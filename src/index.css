@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg: #1A1025;
+  --coral: #FF6B6B;
+  --gold: #FFD93D;
+  --mint: #6BCB77;
+  --purple: #A855F7;
+  --card-bg: rgba(255,255,255,0.07);
+  --card-border: rgba(168,85,247,0.18);
+}
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+input, textarea, button, select {
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  font-size: 16px; /* prevents iOS zoom */
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.5);
+}
+
+::-webkit-scrollbar { width: 0; background: transparent; }
+
+/* ── Logo shimmer ──────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.logo-shimmer {
+  background: linear-gradient(90deg, #FF6B6B 0%, #A855F7 33%, #FFD93D 66%, #FF6B6B 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ── Mesh blob background ─────────────────────────────────────────────────── */
+@keyframes blobA {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(30px, -25px) scale(1.05); }
+  66%       { transform: translate(-15px, 20px) scale(0.95); }
+}
+@keyframes blobB {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(-25px, 20px) scale(1.08); }
+  66%       { transform: translate(20px, -15px) scale(0.97); }
+}
+@keyframes blobC {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(15px, 25px) scale(1.03); }
+}
+
+.blob-a { animation: blobA 12s ease-in-out infinite; }
+.blob-b { animation: blobB 15s ease-in-out infinite; }
+.blob-c { animation: blobC 18s ease-in-out infinite; }
+
+/* ── Pulse glow for unrated plans ─────────────────────────────────────────── */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,107,0); }
+  50%       { box-shadow: 0 0 0 3px rgba(255,107,107,0.15); }
+}
+.pulse-unrated { animation: pulseGlow 2.5s ease-in-out infinite; }
+
+/* ── Star pop ─────────────────────────────────────────────────────────────── */
+@keyframes starPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+.star-pop { animation: starPop 0.3s ease; }
+
+/* ── Shake (wrong secret) ─────────────────────────────────────────────────── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-6px); }
+  80%       { transform: translateX(6px); }
+}
+.shake { animation: shake 0.45s ease; }
+
+/* ── Hide scrollbar (but keep scrollability) ──────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
