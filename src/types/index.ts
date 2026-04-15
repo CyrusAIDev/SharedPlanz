@@ -78,6 +78,16 @@ export interface Identity {
   secret: string
 }
 
+export interface PlanEdit {
+  id: string
+  plan_id: string
+  session_id: string
+  edited_by: string
+  edited_by_emoji: string | null
+  previous_title: string | null
+  created_at: string
+}
+
 export type TabName = 'plans' | 'decide' | 'people'
 
 export type SortMode = 'top' | 'soonest' | 'voted' | 'newest' | 'unrated'

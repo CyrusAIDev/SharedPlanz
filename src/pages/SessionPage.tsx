@@ -24,35 +24,64 @@ function SessionPageInner() {
 
   const [identity, setIdentity] = useState<Identity | null>(null)
   const [identityReady, setIdentityReady] = useState(false)
+  const [resolving, setResolving] = useState(true) // true while checking participant count
   const [activeTab, setActiveTab] = useState<TabName>('plans')
   const [shareOpen, setShareOpen] = useState(false)
 
-  // After session loads, resolve identity
+  // After session loads: check participant count, then resolve identity
   useEffect(() => {
     if (!session) return
 
-    const stored = getIdentity()
-    const joined = getJoinedSessions()
+    setResolving(true)
+    const s = session // capture non-null ref for async closure
 
-    if (stored && joined.includes(session.code)) {
-      setIdentity(stored)
-      setIdentityReady(true)
-      toast.success(`Welcome back ${stored.emoji} ${stored.name}! 👋`, { duration: 2000 })
-      void supabase.from('participants').upsert(
-        { session_id: session.id, name: stored.name, emoji: stored.emoji, secret_emoji: stored.secret },
-        { onConflict: 'session_id,name' }
-      ).then(({ error: e }) => { if (e) console.error('[SessionPage] auto-join upsert error:', e) })
-    } else if (stored && !joined.includes(session.code)) {
-      addJoinedSession(session.code)
-      setIdentity(stored)
-      setIdentityReady(true)
-      void supabase.from('participants').upsert(
-        { session_id: session.id, name: stored.name, emoji: stored.emoji, secret_emoji: stored.secret },
-        { onConflict: 'session_id,name' }
-      ).then(({ error: e }) => { if (e) console.error('[SessionPage] new-session upsert error:', e) })
-    } else {
-      setIdentityReady(false)
+    async function resolveIdentity() {
+      try {
+        // Check if this session already has participants
+        const { count } = await supabase
+          .from('participants')
+          .select('id', { count: 'exact', head: true })
+          .eq('session_id', s.id)
+
+        const isNewSession = (count ?? 0) === 0
+        const stored = getIdentity()
+        const joined = getJoinedSessions()
+
+        if (isNewSession) {
+          // Brand-new session — always run IdentityFlow so the creator sets their group identity
+          setIdentityReady(false)
+        } else if (stored && joined.includes(s.code)) {
+          // Returning to a session they've joined before on this device
+          setIdentity(stored)
+          setIdentityReady(true)
+          toast.success(`Welcome back ${stored.emoji} ${stored.name}! 👋`, { duration: 2000 })
+          void supabase.from('participants').upsert(
+            { session_id: s.id, name: stored.name, emoji: stored.emoji, secret_emoji: stored.secret },
+            { onConflict: 'session_id,name' }
+          ).then(({ error: e }) => { if (e) console.error('[SessionPage] auto-join upsert error:', e) })
+        } else if (stored && !joined.includes(s.code)) {
+          // Existing session, first time joining from this device — auto-join with stored identity
+          addJoinedSession(s.code)
+          setIdentity(stored)
+          setIdentityReady(true)
+          void supabase.from('participants').upsert(
+            { session_id: s.id, name: stored.name, emoji: stored.emoji, secret_emoji: stored.secret },
+            { onConflict: 'session_id,name' }
+          ).then(({ error: e }) => { if (e) console.error('[SessionPage] new-session upsert error:', e) })
+        } else {
+          // No stored identity
+          setIdentityReady(false)
+        }
+      } catch (err) {
+        console.error('[SessionPage] resolveIdentity error:', err)
+        // On error, fall back to showing IdentityFlow
+        setIdentityReady(false)
+      } finally {
+        setResolving(false)
+      }
     }
+
+    void resolveIdentity()
   }, [session])
 
   function handleIdentityComplete(id: Identity) {
@@ -62,8 +91,8 @@ function SessionPageInner() {
     setIdentityReady(true)
   }
 
-  // ── Loading ────────────────────────────────────────────────────────────────
-  if (loading) {
+  // ── Loading (session fetch or identity resolution) ─────────────────────────
+  if (loading || resolving) {
     return (
       <>
         <ProgressBar loading={true} />
@@ -94,7 +123,7 @@ function SessionPageInner() {
   }
 
   // ── Identity flow overlay ──────────────────────────────────────────────────
-  if (!identityReady && !getIdentity()) {
+  if (!identityReady) {
     return (
       <IdentityFlow
         sessionId={session.id}
@@ -142,7 +171,6 @@ function SessionContent({ activeTab, setActiveTab, identity, onShare, onBack }: 
   const { session, rankedPlans, participants, votes, voteResponses } = useSessionContext()
   const [dismissedVoteIds, setDismissedVoteIds] = useState<string[]>([])
 
-  // Show the most recent active vote that hasn't been dismissed
   const activeVote = votes.find((v) => v.is_active && !dismissedVoteIds.includes(v.id)) ?? null
 
   function dismissVote(voteId: string) {
@@ -210,7 +238,6 @@ function SessionContent({ activeTab, setActiveTab, identity, onShare, onBack }: 
 
       <TabBar active={activeTab} onChange={setActiveTab} planCount={rankedPlans.length} />
 
-      {/* Vote interrupting modal */}
       {activeVote && (
         <VoteModal
           vote={activeVote}

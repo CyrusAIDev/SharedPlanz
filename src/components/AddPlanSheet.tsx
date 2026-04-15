@@ -1,14 +1,13 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { BottomSheet } from './BottomSheet'
 import { DateTypeSelector } from './DateTypeSelector'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
-import type { DateType } from '../types'
+import type { DateType, RankedPlan } from '../types'
 import {
-  startOfMonth, endOfMonth, eachDayOfInterval, format,
+  startOfMonth, endOfMonth, eachDayOfInterval, format, parseISO,
   isSameMonth, addMonths, isSameDay, startOfWeek, endOfWeek,
-  parse,
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Calendar, Clock } from 'lucide-react'
 
@@ -18,9 +17,12 @@ interface AddPlanSheetProps {
   sessionId: string
   username: string
   userEmoji: string
+  editPlan?: RankedPlan // when set, sheet is in edit mode
 }
 
-export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: AddPlanSheetProps) {
+export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji, editPlan }: AddPlanSheetProps) {
+  const isEditMode = editPlan !== undefined
+
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dateType, setDateType] = useState<DateType>('none')
@@ -37,6 +39,43 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
   const rangeStartRef = useRef<HTMLInputElement>(null)
   const rangeEndRef = useRef<HTMLInputElement>(null)
 
+  // Pre-fill when opening in edit mode
+  useEffect(() => {
+    if (open && editPlan) {
+      setTitle(editPlan.title)
+      setDescription(editPlan.description ?? '')
+      setDateType(editPlan.date_type)
+      setDateSingle('')
+      setTimeInput('')
+      setRangeStart('')
+      setRangeEnd('')
+      setMultiDates([])
+
+      if (editPlan.date_type === 'single' && editPlan.date_single) {
+        try {
+          const d = parseISO(editPlan.date_single)
+          setDateSingle(format(d, 'yyyy-MM-dd'))
+          const t = format(d, 'HH:mm')
+          if (t !== '00:00') setTimeInput(t)
+        } catch { /* ignore */ }
+      }
+      if (editPlan.date_type === 'range') {
+        if (editPlan.date_range_start) {
+          try { setRangeStart(format(parseISO(editPlan.date_range_start), 'yyyy-MM-dd')) } catch { /* ignore */ }
+        }
+        if (editPlan.date_range_end) {
+          try { setRangeEnd(format(parseISO(editPlan.date_range_end), 'yyyy-MM-dd')) } catch { /* ignore */ }
+        }
+      }
+      if (editPlan.date_type === 'multi' && editPlan.date_multi) {
+        setMultiDates(editPlan.date_multi)
+      }
+    } else if (!open) {
+      // Reset on close
+      resetForm()
+    }
+  }, [open, editPlan])
+
   const inputStyle = {
     background: 'rgba(255,255,255,0.07)',
     border: '1.5px solid rgba(168,85,247,0.2)',
@@ -48,7 +87,7 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
   function formatDisplayDate(iso: string) {
     if (!iso) return null
     try {
-      return format(parse(iso, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')
+      return format(parseISO(`${iso}T00:00:00`), 'MMM d, yyyy')
     } catch {
       return iso
     }
@@ -66,13 +105,8 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
     }
   }
 
-  // Tappable styled box that triggers a hidden input
   function TapField({
-    value,
-    placeholder,
-    icon,
-    onClick,
-    disabled = false,
+    value, placeholder, icon, onClick, disabled = false,
   }: {
     value: string | null
     placeholder: string
@@ -83,7 +117,7 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
     return (
       <div
         onClick={disabled ? undefined : onClick}
-        className="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl cursor-pointer select-none transition-all"
+        className="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl select-none transition-all"
         style={{
           ...inputStyle,
           opacity: disabled ? 0.4 : 1,
@@ -131,23 +165,17 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
     return (
       <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(168,85,247,0.2)' }}>
         <div className="flex items-center justify-between mb-3">
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.9 }}
+          <motion.button type="button" whileTap={{ scale: 0.9 }}
             onClick={() => setCalViewDate((d) => addMonths(d, -1))}
             className="w-8 h-8 flex items-center justify-center rounded-full"
-            style={{ background: 'rgba(255,255,255,0.07)' }}
-          >
+            style={{ background: 'rgba(255,255,255,0.07)' }}>
             <ChevronLeft size={16} color="rgba(255,255,255,0.6)" />
           </motion.button>
           <p className="text-white font-bold text-sm">{format(calViewDate, 'MMMM yyyy')}</p>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.9 }}
+          <motion.button type="button" whileTap={{ scale: 0.9 }}
             onClick={() => setCalViewDate((d) => addMonths(d, 1))}
             className="w-8 h-8 flex items-center justify-center rounded-full"
-            style={{ background: 'rgba(255,255,255,0.07)' }}
-          >
+            style={{ background: 'rgba(255,255,255,0.07)' }}>
             <ChevronRight size={16} color="rgba(255,255,255,0.6)" />
           </motion.button>
         </div>
@@ -164,29 +192,18 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
             const iso = format(day, 'yyyy-MM-dd')
             const selected = multiDates.includes(iso)
             const isToday = isSameDay(day, today)
-
             return (
-              <motion.button
-                key={day.toISOString()}
-                type="button"
-                whileTap={{ scale: 0.85 }}
+              <motion.button key={day.toISOString()} type="button" whileTap={{ scale: 0.85 }}
                 onClick={() => inMonth && toggleMultiDate(day)}
                 disabled={!inMonth}
                 className="flex items-center justify-center rounded-lg min-h-[36px]"
                 style={{
                   background: selected ? 'rgba(255,107,107,0.25)' : 'transparent',
-                  border: selected
-                    ? '1.5px solid #FF6B6B'
-                    : isToday
-                    ? '1.5px solid rgba(168,85,247,0.4)'
-                    : '1.5px solid transparent',
+                  border: selected ? '1.5px solid #FF6B6B' : isToday ? '1.5px solid rgba(168,85,247,0.4)' : '1.5px solid transparent',
                   opacity: inMonth ? 1 : 0.2,
-                }}
-              >
-                <span
-                  className="text-xs font-semibold"
-                  style={{ color: selected ? '#FF6B6B' : isToday ? '#A855F7' : 'rgba(255,255,255,0.7)' }}
-                >
+                }}>
+                <span className="text-xs font-semibold"
+                  style={{ color: selected ? '#FF6B6B' : isToday ? '#A855F7' : 'rgba(255,255,255,0.7)' }}>
                   {format(day, 'd')}
                 </span>
               </motion.button>
@@ -205,8 +222,6 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
 
   function buildPayload() {
     const base = {
-      session_id: sessionId,
-      added_by: username,
       added_by_emoji: userEmoji || '✨',
       title: title.trim(),
       description: description.trim() || null,
@@ -239,23 +254,44 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
     if (!username) { toast.error('Identity not found — go back home'); return }
     setLoading(true)
     try {
-      const payload = buildPayload()
-      const { error } = await supabase.from('plans').insert(payload)
-      if (error) throw error
-      toast.success('Plan added! 🎉')
+      if (isEditMode && editPlan) {
+        // UPDATE existing plan
+        const payload = buildPayload()
+        const { error } = await supabase.from('plans').update(payload).eq('id', editPlan.id)
+        if (error) throw error
+        // Record the edit for real-time notifications + history
+        await supabase.from('plan_edits').insert({
+          plan_id: editPlan.id,
+          session_id: sessionId,
+          edited_by: username,
+          edited_by_emoji: userEmoji || '✨',
+          previous_title: editPlan.title,
+        })
+        toast.success('Plan updated! ✏️')
+      } else {
+        // INSERT new plan
+        const payload = {
+          session_id: sessionId,
+          added_by: username,
+          ...buildPayload(),
+        }
+        const { error } = await supabase.from('plans').insert(payload)
+        if (error) throw error
+        toast.success('Plan added! 🎉')
+      }
       resetForm()
       onClose()
     } catch (err) {
       console.error('[AddPlanSheet] error:', err)
       console.error('[AddPlanSheet] full error:', JSON.stringify(err))
-      toast.error('Could not add plan')
+      toast.error(isEditMode ? 'Could not update plan' : 'Could not add plan')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="Drop an idea 💡">
+    <BottomSheet open={open} onClose={onClose} title={isEditMode ? 'Edit plan ✏️' : 'Drop an idea 💡'}>
       <form onSubmit={(e) => { void handleSubmit(e) }} className="flex flex-col gap-3 mt-2">
         <input
           type="text"
@@ -264,7 +300,7 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
           onChange={(e) => setTitle(e.target.value)}
           className={inputClass}
           style={inputStyle}
-          autoFocus
+          autoFocus={!isEditMode}
           maxLength={100}
         />
         <textarea
@@ -281,24 +317,16 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
 
         {dateType === 'single' && (
           <div className="flex gap-2">
-            {/* Tappable date box */}
             <TapField
               value={formatDisplayDate(dateSingle)}
               placeholder="Tap to pick date"
               icon={<Calendar size={16} />}
               onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
             />
-            <input
-              ref={dateInputRef}
-              type="date"
-              value={dateSingle}
+            <input ref={dateInputRef} type="date" value={dateSingle}
               onChange={(e) => setDateSingle(e.target.value)}
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-            />
+              className="sr-only" tabIndex={-1} aria-hidden="true" />
 
-            {/* Tappable time box */}
             <TapField
               value={formatDisplayTime(timeInput)}
               placeholder="Tap to pick time"
@@ -306,54 +334,34 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
               onClick={() => timeInputRef.current?.showPicker?.() ?? timeInputRef.current?.click()}
               disabled={!dateSingle}
             />
-            <input
-              ref={timeInputRef}
-              type="time"
-              value={timeInput}
+            <input ref={timeInputRef} type="time" value={timeInput}
               onChange={(e) => setTimeInput(e.target.value)}
               disabled={!dateSingle}
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-            />
+              className="sr-only" tabIndex={-1} aria-hidden="true" />
           </div>
         )}
 
         {dateType === 'range' && (
           <div className="flex gap-2">
-            {/* Tappable range start */}
             <TapField
               value={formatDisplayDate(rangeStart)}
               placeholder="Start date"
               icon={<Calendar size={16} />}
               onClick={() => rangeStartRef.current?.showPicker?.() ?? rangeStartRef.current?.click()}
             />
-            <input
-              ref={rangeStartRef}
-              type="date"
-              value={rangeStart}
+            <input ref={rangeStartRef} type="date" value={rangeStart}
               onChange={(e) => setRangeStart(e.target.value)}
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-            />
+              className="sr-only" tabIndex={-1} aria-hidden="true" />
 
-            {/* Tappable range end */}
             <TapField
               value={formatDisplayDate(rangeEnd)}
               placeholder="End date"
               icon={<Calendar size={16} />}
               onClick={() => rangeEndRef.current?.showPicker?.() ?? rangeEndRef.current?.click()}
             />
-            <input
-              ref={rangeEndRef}
-              type="date"
-              value={rangeEnd}
+            <input ref={rangeEndRef} type="date" value={rangeEnd}
               onChange={(e) => setRangeEnd(e.target.value)}
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-            />
+              className="sr-only" tabIndex={-1} aria-hidden="true" />
           </div>
         )}
 
@@ -368,7 +376,7 @@ export function AddPlanSheet({ open, onClose, sessionId, username, userEmoji }: 
         >
           {loading
             ? <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-            : 'Add Plan 🚀'}
+            : isEditMode ? 'Save Changes ✏️' : 'Add Plan 🚀'}
         </motion.button>
       </form>
     </BottomSheet>

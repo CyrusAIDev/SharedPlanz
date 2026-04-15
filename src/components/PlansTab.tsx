@@ -7,6 +7,7 @@ import { CreateVoteSheet } from './CreateVoteSheet'
 import { SortControl } from './SortControl'
 import { RateNudge } from './RateNudge'
 import { useSessionContext } from '../context/SessionContext'
+import { usePlanEdits } from '../hooks/usePlanEdits'
 import { parseISO } from 'date-fns'
 import type { SortMode, RankedPlan } from '../types'
 
@@ -31,9 +32,12 @@ function getEarliestMs(plan: RankedPlan): number {
 
 export function PlansTab({ username, userEmoji }: PlansTabProps) {
   const { session, rankedPlans } = useSessionContext()
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [addSheetOpen, setAddSheetOpen] = useState(false)
+  const [editingPlan, setEditingPlan] = useState<RankedPlan | null>(null)
   const [voteSheetOpen, setVoteSheetOpen] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('top')
+
+  const planEdits = usePlanEdits(session.id, username)
 
   const unratedCount = rankedPlans.filter(
     (p) => username && !p.ratings.some((r) => r.participant_name === username)
@@ -43,7 +47,7 @@ export function PlansTab({ username, userEmoji }: PlansTabProps) {
     const plans = [...rankedPlans]
     switch (sortMode) {
       case 'top':
-        return plans // already sorted by rankScore
+        return plans
       case 'soonest': {
         const withDate = plans.filter((p) => p.date_type !== 'none').sort((a, b) => getEarliestMs(a) - getEarliestMs(b))
         const noDate = plans.filter((p) => p.date_type === 'none')
@@ -59,6 +63,8 @@ export function PlansTab({ username, userEmoji }: PlansTabProps) {
         return plans
     }
   }, [rankedPlans, sortMode, username])
+
+  const editSheetOpen = editingPlan !== null
 
   return (
     <div className="relative flex flex-col gap-3 pb-4">
@@ -103,12 +109,20 @@ export function PlansTab({ username, userEmoji }: PlansTabProps) {
           </motion.div>
         ) : (
           sortedPlans.map((plan, idx) => (
-            <PlanCard key={plan.id} plan={plan} isTop={idx === 0 && sortMode === 'top'} username={username} rank={idx + 1} />
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              isTop={idx === 0 && sortMode === 'top'}
+              username={username}
+              rank={idx + 1}
+              planEdits={planEdits.filter((e) => e.plan_id === plan.id)}
+              onEdit={() => setEditingPlan(plan)}
+            />
           ))
         )}
       </AnimatePresence>
 
-      {/* Vote button (only when 2+ plans) */}
+      {/* Vote button */}
       {rankedPlans.length >= 2 && (
         <motion.button
           whileTap={{ scale: 0.93 }}
@@ -128,7 +142,7 @@ export function PlansTab({ username, userEmoji }: PlansTabProps) {
       {/* Floating + button */}
       <motion.button
         whileTap={{ scale: 0.9 }}
-        onClick={() => setSheetOpen(true)}
+        onClick={() => setAddSheetOpen(true)}
         animate={rankedPlans.length === 0 ? { scale: [1, 1.06, 1] } : { scale: 1 }}
         transition={rankedPlans.length === 0 ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : {}}
         className="fixed right-5 z-20 w-[60px] h-[60px] rounded-full flex items-center justify-center shadow-lg"
@@ -141,12 +155,23 @@ export function PlansTab({ username, userEmoji }: PlansTabProps) {
         <Plus size={28} color="white" strokeWidth={2.5} />
       </motion.button>
 
+      {/* Add new plan sheet */}
       <AddPlanSheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
+        open={addSheetOpen}
+        onClose={() => setAddSheetOpen(false)}
         sessionId={session.id}
         username={username}
         userEmoji={userEmoji}
+      />
+
+      {/* Edit existing plan sheet */}
+      <AddPlanSheet
+        open={editSheetOpen}
+        onClose={() => setEditingPlan(null)}
+        sessionId={session.id}
+        username={username}
+        userEmoji={userEmoji}
+        editPlan={editingPlan ?? undefined}
       />
 
       <CreateVoteSheet
